@@ -92,7 +92,7 @@ jobs:
           LICENSE_USER_COUNT: ${{ github.event_name == 'workflow_dispatch' && inputs.license_user_count || '2147483647' }}
           LICENSE_EXPIRE_YEAR: ${{ github.event_name == 'workflow_dispatch' && inputs.license_expire_year || '2500' }}
         run: |
-          chmod +x src/scan.features.rb
+          chmod +x make.sh src/scan.features.rb scripts/deploy_gitlab_license.sh scripts/validate_gitlab_setup.sh
           ./make.sh
 
       - name: Upload license artifacts
