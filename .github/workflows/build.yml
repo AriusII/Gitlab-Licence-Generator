@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
 
       - name: Deploy license to GitLab Docker host
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy == true && inputs.gitlab_host != '' && secrets.GITLAB_SSH_PRIVATE_KEY != '' && secrets.GITLAB_ADMIN_TOKEN != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy == true && inputs.gitlab_host != '' }}
         env:
           GITLAB_HOST: ${{ inputs.gitlab_host }}
           GITLAB_USER: ${{ inputs.gitlab_user }}
@@ -119,6 +119,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -z "${GITLAB_PRIVATE_TOKEN}" || -z "${SSH_PRIVATE_KEY}" ]]; then
+            echo "[!] Missing required deployment secrets: GITLAB_ADMIN_TOKEN and GITLAB_SSH_PRIVATE_KEY"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H -p "${GITLAB_SSH_PORT}" "${GITLAB_HOST}" >> ~/.ssh/known_hosts
