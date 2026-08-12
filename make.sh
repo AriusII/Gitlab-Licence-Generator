@@ -59,7 +59,7 @@ if [ ! -f "./src/scan.features.rb" ]; then
   echo "[!] src/scan.features.rb is missing, aborting..."
   exit 1
 fi
-chmod +x ./src/scan.features.rb 2>/dev/null || true
+chmod +x ./make.sh ./src/*.rb ./scripts/*.sh 2>/dev/null || true
 
 echo "[*] fetching ruby gem version..."
 RB_GEM_NAME="gitlab-license"
