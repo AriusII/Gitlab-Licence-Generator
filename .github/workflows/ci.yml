@@ -1,0 +1,127 @@
+# Actions are pinned to a commit SHA (see the trailing tag comment on each `uses:` line) per
+# GitHub's recommendation, since floating tags can change without warning.
+
+name: CI/CD
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # 09:00 UTC daily, default settings — see the "Generate license" steps below. GitHub may delay
+    # runs scheduled exactly on the hour under high load, and disables this trigger after 60 days
+    # of repository inactivity.
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      license_name:
+        description: License holder name
+        required: true
+        default: 'Tim Cook'
+      license_company:
+        description: License holder company
+        required: true
+        default: 'Apple Computer, Inc.'
+      license_email:
+        description: License holder email
+        required: true
+        default: 'tcook@apple.com'
+      license_plan:
+        description: GitLab plan to generate
+        type: choice
+        required: true
+        default: ultimate
+        options:
+          - ultimate
+          - premium
+          - starter
+      license_user_count:
+        description: Active user count
+        required: true
+        default: '2147483647'
+      license_expire_year:
+        description: Expiry year
+        required: true
+        default: '2500'
+      include_add_ons:
+        description: Include GitLab Duo / seat-based add-ons (restrictions.add_on_products)
+        type: boolean
+        default: true
+      regenerate_keys:
+        description: Generate a fresh RSA key pair for this run instead of reusing the repository's shared default one
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore GitlabLicenseGenerator.slnx
+
+      - name: Build
+        run: dotnet build GitlabLicenseGenerator.slnx --no-restore -c Release
+
+      - name: Test
+        # --solution (not a positional path) because global.json pins the SDK 10+ Microsoft.Testing.Platform
+        # runner. --report-trx isn't used since neither test project references TrxReport yet.
+        run: dotnet test --solution GitlabLicenseGenerator.slnx --no-build -c Release --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results
+          path: TestResults
+          if-no-files-found: warn
+
+      - name: Publish
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: dotnet publish src/GitlabLicenseGenerator.Cli -c Release -o ./publish
+
+      - name: Generate license (default settings)
+        if: github.event_name == 'schedule'
+        run: ./publish/glgen
+
+      - name: Generate license (custom settings)
+        # The `inputs` context only exists on workflow_dispatch runs — referencing it on a schedule
+        # run would resolve to empty strings, silently overriding appsettings.json's defaults with
+        # blanks instead of leaving them alone. That's why this is a separate, gated step rather than
+        # one step with `inputs.*` env vars applied unconditionally.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          License__Name: ${{ inputs.license_name }}
+          License__Company: ${{ inputs.license_company }}
+          License__Email: ${{ inputs.license_email }}
+          License__Plan: ${{ inputs.license_plan }}
+          License__UserCount: ${{ inputs.license_user_count }}
+          License__ExpireYear: ${{ inputs.license_expire_year }}
+          License__IncludeAddOns: ${{ inputs.include_add_ons }}
+          License__RegenerateKeys: ${{ inputs.regenerate_keys }}
+        run: ./publish/glgen
+
+      - name: Upload license artifact
+        # Only the public key is uploaded alongside the license — the only key material GitLab
+        # itself ever consumes; the private key never leaves keys/. 1 day is GitHub's minimum
+        # retention — this artifact is meant to be grabbed right after the run, not stored.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitlab-license
+          path: |
+            output/result.gitlab-license
+            output/license.json
+            output/public.key
+          if-no-files-found: error
+          retention-days: 1
