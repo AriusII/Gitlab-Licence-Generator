@@ -1,0 +1,21 @@
+# Runs the license generator once and exits — it is not a long-running server. Re-run with
+# `docker compose up` any time you need to regenerate the license (e.g. after changing a setting
+# below). ./keys starts out as this repository's committed default key pair (see README.md); the
+# volume mount just lets you swap in your own (e.g. after License__RegenerateKeys=true) and have it
+# persist across runs.
+services:
+  glgen:
+    build: .
+    # Or, without building locally:
+    # image: ghcr.io/lakr233/gitlab-license-generator:main
+    volumes:
+      - ./keys:/license-generator/keys
+      - ./output:/license-generator/output
+    environment:
+      License__Name: "Tim Cook"
+      License__Company: "Apple Computer, Inc."
+      License__Email: "tcook@apple.com"
+      License__Plan: "ultimate"
+      License__UserCount: "2147483647"
+      License__ExpireYear: "2500"
+      License__IncludeAddOns: "true"

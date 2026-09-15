@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\GitlabLicenseGenerator.Core\GitlabLicenseGenerator.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+</Project>

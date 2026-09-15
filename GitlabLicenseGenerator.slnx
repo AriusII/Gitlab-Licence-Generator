@@ -1,0 +1,10 @@
+<Solution>
+    <Folder Name="/src/">
+        <Project Path="src/GitlabLicenseGenerator.Cli/GitlabLicenseGenerator.Cli.csproj"/>
+        <Project Path="src/GitlabLicenseGenerator.Core/GitlabLicenseGenerator.Core.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/GitlabLicenseGenerator.Cli.Tests/GitlabLicenseGenerator.Cli.Tests.csproj"/>
+        <Project Path="tests/GitlabLicenseGenerator.Core.Tests/GitlabLicenseGenerator.Core.Tests.csproj"/>
+    </Folder>
+</Solution>

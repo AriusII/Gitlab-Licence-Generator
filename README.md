@@ -10,244 +10,195 @@
 
 </div>
 
-## Description
+## What this is
 
-**GitLab License Generator** This project generates a GitLab license for **development purposes**. If you encounter any problems, please troubleshoot them on your own.
+A tool that generates a self-signed **GitLab EE Ultimate** license, for **local/development use only**.
 
-> Last tested on GitLab EE v19.3.0.
+It does exactly one thing: produce an RSA key pair and a `.gitlab-license` file granting the maximum permissions an offline license can carry — every EE Ultimate feature, every GitLab Duo / seat-based add-on, effectively unlimited users, an expiry far in the future.
 
-## Principles
+**What it does not do**: it never connects to, deploys to, or configures a running GitLab instance. Wiring the generated key/license into your own GitLab deployment is a manual step you do yourself (see [Install the license](#install-the-license), or the `docker-compose` example below).
 
-### **src/generator.keys.rb**
+**Works out of the box**: a ready-to-use RSA key pair (`keys/`) ships committed in this repository, so cloning/forking it is enough to generate a working license immediately — no setup step required. That pair is therefore identical across every clone and fork; see the security note under [Configuration](#configuration) if that matters for your use case.
 
-GitLab uses a public/private key pair to encrypt its license. The public key is shipped with the GitLab distribution, while the private key is kept secure. The license itself is simply a JSON dictionary. Since GitLab has made its code open-source, we can easily generate our own license.
+**Configuration is settings-only, not CLI flags.** Everything is controlled by `appsettings.json` (bundled with the tool) and, for automation, environment variables. There are no command-line options to learn.
 
-### **src/generator.license.rb**
+> Feature/add-on set verified against gitlab-org/gitlab's `ee/app/models/gitlab_subscriptions/features.rb` (master / 19.x line).
 
-The `lib` folder is extracted from GitLab's source code. It is used to build and validate the license. The script `src/generator.license.rb` loads this functionality.
+## Get a license
 
-### **src/scan.features.rb**
-
-Features are extracted from an object filled with constants. The most comprehensive plan for a license is **Ultimate**, but features like Geo Mirroring are not included in any standard plan. Therefore, we manually add these features.
-
-## Usage
-
-### GitHub Actions: generate and deploy on demand
-
-This repository includes a manual GitHub Actions workflow in `.github/workflows/build.yml`. It can be triggered from the GitHub UI and will:
-
-- generate a GitLab EE license with your selected metadata
-- upload the public key and license file as workflow artifacts
-- optionally push the generated files to a remote GitLab Docker host over SSH and upload the license with the GitLab API
-
-Important security notes:
-
-- `GITLAB_HOME` must be set on the GitLab Docker host before starting the container.
-- The private key should never be published as a long-lived artifact in GitHub; keep it local or in a protected secret store.
-- The SSH deployment verifies the remote host key via `ssh-keyscan` before connecting.
-
-Required repository secrets for deployment:
-
-- `GITLAB_SSH_PRIVATE_KEY`: private SSH key for the GitLab Docker host
-- `GITLAB_ADMIN_TOKEN`: GitLab administrator personal access token with API access
-
-For Docker-based GitLab hosts, the expected minimum setup is:
-
-```bash
-export GITLAB_HOME=/srv/gitlab
-mkdir -p "$GITLAB_HOME/config" "$GITLAB_HOME/logs" "$GITLAB_HOME/data"
-```
-
-Example manual run values:
-
-```yaml
-license_name: Tim Cook
-license_company: Apple Computer, Inc.
-license_email: tcook@apple.com
-license_plan: ultimate
-license_user_count: 2147483647
-license_expire_year: 2500
-gitlab_version: 19.3.0
-deploy: true
-gitlab_host: gitlab.example.com
-gitlab_user: root
-gitlab_ssh_port: '22'
-gitlab_container_name: gitlab
-gitlab_api_url: https://gitlab.example.com
-```
-
-The deployment helper script is `bash ./scripts/deploy_gitlab_license.sh`.
-
-### Using Docker image (Zero setup)
-
-Using this method license files are generated under `./license` directory
-> Please note that in standard docker installations, owner of the files generated in license directory will be root
-
-#### Method (1): Pull image
-
-```bash
-docker run --rm -it \
-  -v "./license:/license-generator/build" \
-  -e LICENSE_NAME="Tim Cook" \
-  -e LICENSE_COMPANY="Apple Computer, Inc." \
-  -e LICENSE_EMAIL="tcook@apple.com" \
-  -e LICENSE_PLAN="ultimate" \
-  -e LICENSE_USER_COUNT="2147483647" \
-  -e LICENSE_EXPIRE_YEAR="2500" \
-  ghcr.io/lakr233/gitlab-license-generator:main
-```
-
-#### Method (2): Build image
-
-```bash
-git clone https://github.com/Lakr233/GitLab-License-Generator.git
-docker build GitLab-License-Generator -t gitlab-license-generator:main
-docker run --rm -it \
-  -v "./license:/license-generator/build" \
-  -e LICENSE_NAME="Tim Cook" \
-  -e LICENSE_COMPANY="Apple Computer, Inc." \
-  -e LICENSE_EMAIL="tcook@apple.com" \
-  -e LICENSE_PLAN="ultimate" \
-  -e LICENSE_USER_COUNT="2147483647" \
-  -e LICENSE_EXPIRE_YEAR="2500" \
-  gitlab-license-generator:main
-```
-
-### Manual: Prerequisites
-
-Before starting, ensure your environment is properly configured.
-
-#### 1. Install Ruby and gem
-
-To run this project, you need **Ruby** and the **gem** package manager.
-
-- **On Linux (Ubuntu/Debian)**:
-
-  ```bash
-  sudo apt update
-  sudo apt install ruby-full
-  ```
-
-- **On macOS** (via Homebrew):
-
-  ```bash
-  brew install ruby
-  ```
-
-#### 2. Install Bundler and necessary gems
-
-After installing Ruby, you need to install **Bundler** to manage Ruby dependencies.
-
-```bash
-gem install bundler
-```
-
-#### 3. Install the `gitlab-license` gem
-
-The project requires the `gitlab-license` gem, which will be automatically downloaded and used by the script.
-
-```bash
-gem install gitlab-license
-```
-
-### Steps to Generate the GitLab License
-
-#### 1. Clone the project repository
-
-Clone this project to your local machine.
+### Option A — Docker Compose (recommended)
 
 ```bash
 git clone https://github.com/Lakr233/GitLab-License-Generator.git
 cd GitLab-License-Generator
+docker compose up --build
 ```
 
-#### 2. Run the `make.sh` script
+This builds the image (which already includes the repository's default key pair) and writes the license to `./output/result.gitlab-license`. Every run also copies the exact public key that signed it (`public.key`) into `./output/` — that's the only key material GitLab itself needs, so the license and the key to install it live together in one directory. The private key stays only under `./keys/`. The container runs once and exits — re-run `docker compose up` any time you want to regenerate.
 
-Once all the prerequisites are met, run the script:
+To change any setting, edit the `environment:` block in `docker-compose.yml`:
+
+```yaml
+services:
+  glgen:
+    build: .
+    volumes:
+      - ./keys:/license-generator/keys
+      - ./output:/license-generator/output
+    environment:
+      License__Name: "Tim Cook"
+      License__Company: "Apple Computer, Inc."
+      License__Email: "tcook@apple.com"
+      License__Plan: "ultimate"
+      License__UserCount: "2147483647"
+      License__ExpireYear: "2500"
+      License__IncludeAddOns: "true"
+```
+
+### Option B — plain `docker run`
 
 ```bash
-./make.sh
+docker run --rm \
+  -v "./keys:/license-generator/keys" \
+  -v "./output:/license-generator/output" \
+  -e License__ExpireYear="2500" \
+  ghcr.io/lakr233/gitlab-license-generator:main
 ```
 
-The script will perform the following actions:
+Without mounting `./keys`, the container just uses its baked-in default key pair (deterministic, same every run). Mount `./keys` only if you want to persist a *regenerated* pair of your own across runs (see `RegenerateKeys` below) — otherwise it's optional. Either way, every run copies the public key it used into `./output/` next to the generated license — that's the only key material GitLab itself needs; the private key stays under `./keys/`.
 
-- Download and extract the `gitlab-license` gem.
-- Copy and modify the required files.
-- Clone the GitLab source code from GitLab.com.
-- Generate a public/private key pair.
-- Generate a GitLab license.
+### Option C — from source (.NET 10 SDK required)
 
-#### 3. Replace the public key in GitLab
+```bash
+git clone https://github.com/Lakr233/GitLab-License-Generator.git
+cd GitLab-License-Generator
+dotnet run --project src/GitlabLicenseGenerator.Cli
+```
 
-The script generates a public key located in `build/public.key`. You need to replace GitLab’s existing public key with this newly generated one to ensure the license is accepted.
+Same result as the Docker options: a key pair under `keys/` and a license under `output/`, using the repository root as the working directory. Every run also copies the public key into `output/` alongside the license — the private key stays under `keys/`.
 
-- **If GitLab is installed on your server**:
+### Option D — GitHub Actions (no install required)
 
-  ```bash
-  sudo cp ./build/public.key /opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub
-  sudo gitlab-ctl reconfigure
-  sudo gitlab-ctl restart
-  ```
+Generate a license from your browser, with no local .NET or Docker setup:
 
-- **If GitLab is installed via Docker**:
-  Set `GITLAB_HOME` and use the provided Compose example:
+1. `workflow_dispatch` requires write access to the repository, so if you're not a collaborator here, **fork this repository first**, then open the **Actions** tab on your fork (enable workflows if prompted — a one-time step on a fresh fork).
+2. Open **Actions > CI/CD > Run workflow**.
+3. Fill in whichever fields you want to change — name, company, email, plan, user count, expiry year, add-ons, or check "regenerate keys" for your own unique key pair instead of the shared default one — and leave the rest at their defaults.
+4. Run it, then download the `gitlab-license` artifact from the finished run: it contains the license, its plaintext JSON, and the matching public key. **Download it right away** — it expires after 1 day (GitHub's minimum retention), same as the daily scheduled run below.
 
-  ```bash
-  export GITLAB_HOME=/srv/gitlab
-  mkdir -p "$GITLAB_HOME/config" "$GITLAB_HOME/logs" "$GITLAB_HOME/data"
-  docker compose -f docker-compose.gitlab-ee-19.3.yml up -d
-  ```
+This same workflow also runs automatically every day at 09:00 UTC with default settings — that scheduled run exercises the pipeline, it isn't a distribution channel, so use steps 1–4 above for a license you actually intend to install.
 
-  Then place the generated public key into the container or use the deployment helper:
+## Configuration
 
-  ```bash
-  docker cp ./build/public.key gitlab:/opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub
-  docker exec gitlab gitlab-ctl reconfigure
-  docker exec gitlab gitlab-ctl restart
-  ```
+All settings live in the `License` section of `appsettings.json` (`src/GitlabLicenseGenerator.Cli/appsettings.json`), bundled next to the executable. You never need to edit it to get a working license — every default already grants maximum permissions.
 
-#### 4. Install the license in GitLab
+| Setting | Default | Description |
+| --- | --- | --- |
+| `Name` | `Tim Cook` | Licensee name |
+| `Company` | `Apple Computer, Inc.` | Licensee company |
+| `Email` | `tcook@apple.com` | Licensee email |
+| `Plan` | `ultimate` | `ultimate`, `premium`, or `starter` |
+| `UserCount` | `2147483647` | Active user / seat count |
+| `ExpireYear` | `2500` | License expiry year (month/day are always April 1st) |
+| `IncludeAddOns` | `true` | Also grant every GitLab Duo / seat-based add-on |
+| `PublicKeyPath` | `keys/public.key` | Where the RSA public key is read from/written to — the repository ships a default pair here |
+| `PrivateKeyPath` | `keys/private.key` | Where the RSA private key is read from/written to — the repository ships a default pair here |
+| `RegenerateKeys` | `false` | Set `true` once to replace the shared default pair with a fresh, private one of your own |
+| `OutputPath` | `output/result.gitlab-license` | Where the encrypted license file is written (the public key used is copied alongside it — GitLab never needs the private key) |
+| `PlainLicensePath` | `output/license.json` | Optional plaintext copy of the license JSON, for inspection |
 
-Once the public key is replaced, log in to GitLab’s admin interface to install the generated license.
+To override a setting without editing the file, set an environment variable using .NET's standard double-underscore convention for nested keys — this is how every example above (and the Docker image) does it:
+
+```bash
+export License__Name="Ada Lovelace"
+export License__ExpireYear=2100
+```
+
+### Security note: the shared default key pair
+
+`keys/private.key` and `keys/public.key` are committed to this repository so it works immediately after a clone/fork, with no generation step. That also means **every clone and fork shares the exact same key pair** — anyone can decrypt/re-sign a `.gitlab-license` file with it. In practice this is a low-risk trade-off for this tool's actual use case: installing a custom public key on a GitLab instance already requires root/admin access to that instance, so the shared pair doesn't hand out anything an attacker wouldn't already need higher privileges to obtain. It is still meant for **local/development use only** — if you want a key pair only you have, delete `keys/private.key` and `keys/public.key` (or set `License__RegenerateKeys=true` for one run) before generating the license you'll actually install. Every run also copies whichever public key it used into the (gitignored) `output/` directory alongside the license — that's a local convenience copy of the same public key described above, not a new or additional one, so it doesn't change the posture. The private key is never copied out of `keys/`.
+
+## Install the license
+
+Once you have `keys/public.key` and `output/result.gitlab-license`:
+
+### 1. Replace GitLab's license encryption public key
+
+GitLab reads its license encryption public key from a fixed path inside the instance: `/opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub`. You must overwrite it with the public key this tool generated, or the license you install in step 2 will be rejected. (`output/public.key` from the same generation run is an identical copy and works interchangeably with `keys/public.key` below.)
+
+**Docker / docker-compose** — mount it read-only in your own `docker-compose.yml` (see `examples/docker-compose.gitlab-ee-19.3.yml` for a full example):
+
+```yaml
+services:
+  gitlab:
+    image: gitlab/gitlab-ee:19.3.0-ee.0
+    volumes:
+      - ./keys/public.key:/opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub:ro
+      # ...your other GitLab volumes/config
+```
+
+Then reconfigure once the container is up:
+
+```bash
+docker exec gitlab gitlab-ctl reconfigure
+docker exec gitlab gitlab-ctl restart
+```
+
+**Bare-metal / Omnibus install**:
+
+```bash
+sudo cp ./keys/public.key /opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub
+sudo gitlab-ctl reconfigure
+sudo gitlab-ctl restart
+```
+
+### 2. Upload the license in GitLab
 
 1. Log in to GitLab as an administrator.
-2. Navigate to the **Admin Area** from the bottom-left corner.
-3. Go to **Settings > General** and upload the generated license file (`build/result.gitlab-license`).
-4. Check the **Terms of Service** checkbox and click **Add License**.
+2. Go to **Admin Area > Settings > General**.
+3. Find the **"Add License"** section, upload `output/result.gitlab-license`, check the Terms of Service checkbox, and click **Add License**.
+4. GitLab redirects you to **Admin Area > Subscription**, where you can review the installed license (and, if it includes add-ons, the GitLab Duo seats it granted) at any time.
 
-If necessary, you can directly access the license upload page via:
+> There is no `/admin/license/new` page in current GitLab — the upload form lives on the General settings page above.
 
+### Optional: disable Service Ping
+
+```bash
+sudo nano /etc/gitlab/gitlab.rb
 ```
-<YourGitLabURL>/admin/license/new
+
+```ruby
+gitlab_rails['usage_ping_enabled'] = false
 ```
 
-#### 5. Disable Service Ping (optional)
+```bash
+sudo gitlab-ctl reconfigure
+sudo gitlab-ctl restart
+```
 
-If you want to disable GitLab’s usage data collection (Service Ping), modify GitLab’s configuration file:
+## Testing against a local GitLab instance
 
-- Open the configuration file:
+`examples/docker-compose.gitlab-ee-19.3.yml` is a reference GitLab EE server pre-wired to accept a license from this tool (it already mounts `../keys/public.key` into the right path). It is **not** part of the generator — it's provided purely so you have something to test the generated license against:
 
-  ```bash
-  sudo nano /etc/gitlab/gitlab.rb
-  ```
+```bash
+export GITLAB_HOME=/srv/gitlab
+mkdir -p "$GITLAB_HOME/config" "$GITLAB_HOME/logs" "$GITLAB_HOME/data"
+docker compose -f examples/docker-compose.gitlab-ee-19.3.yml up -d
+```
 
-- Add the following line:
+## How it works
 
-  ```bash
-  gitlab_rails['usage_ping_enabled'] = false
-  ```
+- **`GitlabLicenseGenerator.Core/Crypto`** — RSA key generation and the license encryption envelope (GitLab encrypts its license JSON with an RSA/AES scheme; the public half ships with GitLab, the private half stays with whoever issues licenses).
+- **`GitlabLicenseGenerator.Core/Licensing`** — builds, validates, serializes and exports the license:
+  - `LicenseFeatureCatalog` — every EE Ultimate feature symbol GitLab's own `FEATURES_BY_PLAN` maps to the `ultimate` plan.
+  - `LicenseAddOnCatalog` / `LicenseAddOnPurchase` — the seat-based add-on mechanism (`restrictions.add_on_products`) granting GitLab Duo Pro, Duo Enterprise, Duo with Amazon Q, Duo Core, Duo Agent Platform Self-Hosted, GitLab Credits, Secrets Manager and Flex Offline. This only provisions on an **offline cloud license** (`cloud_licensing_enabled` + `offline_cloud_licensing_enabled`, both always set by this tool).
+  - `LicenseFactory` — combines the above into one maximal-permissions `License`.
+  - `LicenseValidator` / `LicenseCodec` / `LicenseJsonConverter` — validation, GitLab-compatible JSON shape, encryption/export.
 
-- Reconfigure and restart GitLab:
+## Troubleshooting
 
-  ```bash
-  sudo gitlab-ctl reconfigure
-  sudo gitlab-ctl restart
-  ```
-
-### Troubleshooting
-
-- **HTTP 502 Error**:
-  If you encounter this error, wait for GitLab to finish starting up (it may take some time).
+- **HTTP 502 from GitLab**: wait for it to finish starting up — it can take several minutes on first boot.
+- **License rejected**: confirm you replaced `.license_encryption_key.pub` with the *matching* `keys/public.key` from the same generation run you're uploading, and restarted GitLab after copying it.
 
 ## LICENSE
 

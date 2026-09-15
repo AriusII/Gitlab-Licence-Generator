@@ -1,6 +1,22 @@
-langs/
-README.md
+README*.md
 LICENSE
 .github/
 Dockerfile
 .*ignore
+.git/
+.idea/
+
+## .NET
+# Bare patterns only match at the context root, so bin/obj/.vs are also
+# excluded with a **/ prefix to catch each project's own build output
+# (e.g. src/GitlabLicenseGenerator.Cli/obj/) wherever it appears.
+bin/
+obj/
+.vs/
+**/bin/
+**/obj/
+**/.vs/
+*.user
+TestResults/
+tests/
+output/
